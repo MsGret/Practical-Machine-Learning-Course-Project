@@ -1,0 +1,113 @@
+---
+title: "Prediction Assignment Writeup"
+author: "MsGret"
+date: "September 25, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify *how much of a particular activity they do*, but they rarely quantify *how well they do it*. In this project, your **goal** will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in **5 different ways**. 
+
+## Data Preprocessing
+
+The data for this project come from this source: <http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har>
+
+### Read the Data
+
+Read the data:
+
+```{r cars}
+trainUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+trainSet <- read.csv(url(trainUrl), na.strings = c("NA", ""))
+dim(trainSet)
+
+testSet <- read.csv(url(testUrl), na.strings = c("NA", ""))
+dim(testSet)
+```
+
+### Clean the Data
+
+Remove variables with NA value and some useless variables (`X`, `user_name`, `raw_timestamp_part_1`, `raw_timestamp_part_2`, `cvtd_timestamp`, `new_window`, `num_window`):
+
+```{r}
+notNA <- colSums(is.na(trainSet)) == 0
+trainSet <- trainSet[, notNA]
+testSet <- testSet[, notNA]
+
+removeVar <- grep("^X|user|timestamp|window", names(trainSet))
+trainSet <- trainSet[, -removeVar]
+testSet <- testSet[, -removeVar]
+
+dim(trainSet)
+dim(testSet)
+```
+
+Cleaned train data set contains 19622 observations and 53 variables, and the test data set contains 20 observations and 53 variables. **Appendix A** shows correlation matrix of these 53 variables.
+
+### Split the Data
+
+Separate our `trainSet` into `traning` and `dev` (development) sets for Machine Learning
+
+```{r}
+library(caret)
+set.seed(2020)
+
+inTrain <- createDataPartition(trainSet$classe, p = 0.7, list = FALSE)
+training <- trainSet[inTrain, ]
+dim(training)
+dev <- trainSet[-inTrain, ]
+dim(dev)
+```
+
+## Prediction Models
+
+Compare prediction based on the two models:
+
+- generalized boosted model;
+- random forest.
+
+### Generalized Boosted Model
+
+We will use **5-fold cross validation** when applying the algorithm.
+
+```{r}
+set.seed(2020)
+ctrl <- trainControl(method = "cv", number = 5)
+gbmModel <- train(classe ~ ., data = training, method = "gbm",
+                  trControl = ctrl,
+                  verbose = FALSE)
+
+gbmPrediction <- predict(gbmModel, dev)
+length(gbmPrediction)
+length(dev$classe)
+confusionMatrix(table(gbmPrediction, dev$classe))
+```
+
+### Random Forest
+
+"Random decision forests correct for decision trees' habit of overfitting to their training set. Random forests generally outperform decision trees... A random forest dissimilarity can be attractive because it handles mixed variable types very well, is invariant to monotonic transformations of the input variables, and is robust to outlying observations." <https://www.wikiwand.com/en/Random_forest>
+
+```{r}
+set.seed(2020)
+ctrl <- trainControl(method = "cv", number = 5)
+rfModel <- train(classe ~ ., data = training, method = "rf", trControl = ctrl)
+rfPrediction <- predict(rfModel, dev)
+confusionMatrix(table(rfPrediction, dev$classe))
+```
+
+## Conclusion and Final Prediction
+
+Random forest has better performance (Accuracy: 0.9913) than the generalized boosted model (Accuracy: 0.9572). 
+
+Let's test `rfModel` in the `testSet`:
+```{r}
+rfPrediction <- predict(rfModel, testSet)
+rfPrediction
+```
